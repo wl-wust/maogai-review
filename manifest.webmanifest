@@ -1,0 +1,32 @@
+{
+  "name": "毛概复习 · 离线学习平台",
+  "short_name": "毛概复习",
+  "description": "毛泽东思想和中国特色社会主义理论体系概论知识库、刷题与背诵平台",
+  "lang": "zh-CN",
+  "start_url": "./#/home",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f3f5f3",
+  "theme_color": "#963a32",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

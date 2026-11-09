@@ -396,3 +396,11 @@ function prepareReciteItem(itemId) {
 
 window.addEventListener('online', () => toast('已恢复网络，当前仍可继续离线使用'));
 window.addEventListener('offline', () => toast('已进入离线模式，学习记录会继续保存在本机'));
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      toast('离线缓存初始化失败，请通过启动脚本打开', 'warning');
+    });
+  });
+}

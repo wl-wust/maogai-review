@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="毛概复习">
+  <rect width="512" height="512" rx="108" fill="#963a32"/>
+  <path d="M118 352V160h48l90 104 90-104h48v192h-53V242l-85 98-85-98v110z" fill="#fffaf5"/>
+  <path d="M142 388h228" fill="none" stroke="#e3bd76" stroke-width="16" stroke-linecap="round"/>
+</svg>

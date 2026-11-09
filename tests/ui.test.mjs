@@ -1,7 +1,7 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,7 +15,8 @@ const mime = {
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json',
-  '.svg': 'image/svg+xml'
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png'
 };
 
 let server;
@@ -113,6 +114,17 @@ test('主观题可切换无答案、挖空和完整答案', async () => {
   await page.close();
 });
 
+test('知识库搜索能同时命中题目与知识卡', async () => {
+  const page = await browser.newPage({ viewport: { width: 1024, height: 768 } });
+  await page.goto(`${baseUrl}#/knowledge`, { waitUntil: 'networkidle' });
+  await page.getByPlaceholder(/搜索知识点/).fill('毛泽东思想');
+  await page.locator('.search-result').first().waitFor();
+  assert.ok((await page.locator('.search-result').count()) >= 2);
+  assert.ok((await page.locator('.result-kind').allInnerTexts()).includes('知识卡'));
+  assert.ok((await page.locator('.result-kind').allInnerTexts()).includes('选择题'));
+  await page.close();
+});
+
 test('收藏中心展示收藏并可移出错题本', async () => {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
@@ -152,3 +164,87 @@ test('收藏中心展示收藏并可移出错题本', async () => {
   assert.deepEqual(errors, []);
   await page.close();
 });
+
+test('PWA 首次缓存后可在断网状态打开', async () => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  const manifestStatus = await page.request.get(`${baseUrl}/manifest.webmanifest`);
+  assert.equal(manifestStatus.status(), 200);
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
+  await page.reload({ waitUntil: 'networkidle' });
+  await context.setOffline(true);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: /毛概复习/ }).first().waitFor();
+  await page.goto(`${baseUrl}#/recite`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: '主观题背诵' }).waitFor();
+  assert.deepEqual(errors, []);
+  await context.setOffline(false);
+  await context.close();
+});
+
+test('手机、平板和桌面视口无横向溢出并生成验收截图', { timeout: 90000 }, async () => {
+  const screenshotDir = path.join(root, 'screenshots');
+  await mkdir(screenshotDir, { recursive: true });
+  const viewports = [
+    { name: 'mobile', width: 375, height: 812 },
+    { name: 'tablet', width: 768, height: 1024 },
+    { name: 'desktop', width: 1440, height: 900 }
+  ];
+  for (const viewport of viewports) {
+    const page = await browser.newPage({
+      viewport: { width: viewport.width, height: viewport.height }
+    });
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    await page.goto(baseUrl, { waitUntil: 'networkidle' });
+    await page.locator('#stat-total').waitFor();
+    await page.waitForTimeout(320);
+    await assertNoOverflow(page, `首页/${viewport.name}`);
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-home.png`) });
+
+    await page.goto(`${baseUrl}#/knowledge`, { waitUntil: 'networkidle' });
+    await page.getByPlaceholder(/搜索知识点/).fill('农村包围城市');
+    await page.locator('.search-result').first().waitFor();
+    await page.waitForTimeout(320);
+    await assertNoOverflow(page, `知识库/${viewport.name}`);
+    await page.screenshot({
+      path: path.join(screenshotDir, `${viewport.name}-knowledge.png`)
+    });
+
+    await page.goto(`${baseUrl}#/quiz`, { waitUntil: 'networkidle' });
+    await page.locator('[data-action="start-quiz"]').click();
+    await page.locator('.option-button').first().waitFor();
+    await page.waitForTimeout(320);
+    await assertNoOverflow(page, `答题/${viewport.name}`);
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-quiz.png`) });
+
+    await page.goto(`${baseUrl}#/recite`, { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: '挖空背' }).click();
+    await page.locator('.cloze-blank').first().waitFor();
+    await page.waitForTimeout(320);
+    await assertNoOverflow(page, `背诵/${viewport.name}`);
+    await page.screenshot({ path: path.join(screenshotDir, `${viewport.name}-recite.png`) });
+
+    await page.goto(`${baseUrl}#/favorites`, { waitUntil: 'networkidle' });
+    await page.getByRole('heading', { name: '收藏与错题' }).waitFor();
+    await page.waitForTimeout(320);
+    await assertNoOverflow(page, `收藏/${viewport.name}`);
+    await page.screenshot({
+      path: path.join(screenshotDir, `${viewport.name}-favorites.png`)
+    });
+
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+});
+
+async function assertNoOverflow(page, label) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth
+  );
+  assert.ok(overflow <= 1, `${label} 横向溢出 ${overflow}px`);
+}
