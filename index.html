@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#8f312b" />
+    <meta
+      name="description"
+      content="毛泽东思想和中国特色社会主义理论体系概论离线知识库与刷题平台"
+    />
+    <title>毛概复习 · 离线学习平台</title>
+    <link rel="stylesheet" href="css/app.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="主导航">
+        <a class="brand" href="#/home" aria-label="毛概复习首页">
+          <span class="brand-mark">M</span>
+          <span class="brand-copy">
+            <strong>毛概复习</strong>
+            <small>离线学习平台</small>
+          </span>
+        </a>
+        <nav class="desktop-nav" id="desktop-nav"></nav>
+        <div class="sidebar-footer">
+          <div class="local-note">
+            <i data-lucide="shield-check" aria-hidden="true"></i>
+            <span>学习记录仅保存在本机</span>
+          </div>
+          <button class="text-button" type="button" data-action="reset-progress">
+            <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+            清空学习记录
+          </button>
+        </div>
+      </aside>
+
+      <div class="app-body">
+        <header class="mobile-header">
+          <a class="brand compact" href="#/home">
+            <span class="brand-mark">M</span>
+            <span class="brand-copy"><strong>毛概复习</strong><small>离线学习</small></span>
+          </a>
+          <a class="icon-button" href="#/favorites" aria-label="打开收藏">
+            <i data-lucide="bookmark" aria-hidden="true"></i>
+          </a>
+        </header>
+
+        <main id="main-content" tabindex="-1"></main>
+
+        <nav class="mobile-nav" id="mobile-nav" aria-label="移动端主导航"></nav>
+      </div>
+    </div>
+
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <div id="modal-root"></div>
+
+    <script src="assets/vendor/lucide.min.js"></script>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
