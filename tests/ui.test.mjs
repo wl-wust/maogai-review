@@ -112,3 +112,43 @@ test('主观题可切换无答案、挖空和完整答案', async () => {
   assert.ok(overflow <= 1, `背诵页面横向溢出 ${overflow}px`);
   await page.close();
 });
+
+test('收藏中心展示收藏并可移出错题本', async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'maogai-review-state-v1',
+      JSON.stringify({
+        version: 1,
+        answered: {
+          q001: {
+            attempts: 1,
+            correctCount: 0,
+            wrongCount: 1,
+            streak: 0,
+            bestStreak: 0,
+            lastCorrect: false,
+            lastAt: '2026-11-09T10:00:00.000Z',
+            lastWrongAt: '2026-11-09T10:00:00.000Z',
+            dismissedFromWrong: false
+          }
+        },
+        favorites: { questions: ['q001'], subjective: ['s01'], knowledge: ['k01'] },
+        lastSession: null,
+        subjective: { index: 0, modes: {} }
+      })
+    );
+  });
+  await page.goto(`${baseUrl}#/favorites?tab=questions`, { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('.saved-item').first().waitFor();
+  assert.equal(await page.locator('.saved-item').count(), 1);
+  await page.locator('[href="#/favorites?tab=wrong"]').click();
+  await page.getByRole('button', { name: /移出错题本/ }).click();
+  await page.getByText('当前没有错题').waitFor();
+  assert.deepEqual(errors, []);
+  await page.close();
+});

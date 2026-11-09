@@ -2,6 +2,7 @@ import { chapters, questions } from '../data/questions.js';
 import { subjective } from '../data/subjective.js';
 import {
   clearState,
+  dismissWrong,
   getWrongIds,
   loadState,
   recordAnswer,
@@ -26,6 +27,7 @@ import {
 import { renderQuiz } from './views/quiz.js';
 import { renderRecite } from './views/recite.js';
 import { setReciteMode } from './recite.js';
+import { renderFavorites } from './views/favorites.js';
 
 const navItems = [
   { route: 'home', label: '首页', icon: 'layout-dashboard' },
@@ -113,6 +115,7 @@ function renderRoute(preserveScroll = false) {
     main.innerHTML = renderKnowledge(state, params, knowledgeQuery);
   } else if (name === 'quiz') main.innerHTML = renderQuiz(state, params);
   else if (name === 'recite') main.innerHTML = renderRecite(state, params);
+  else if (name === 'favorites') main.innerHTML = renderFavorites(state, params);
   else main.innerHTML = renderPlaceholder(name, params);
 
   lastRoute = name;
@@ -297,6 +300,15 @@ function handleAction(event) {
     trigger.classList.add('is-revealed');
     trigger.textContent = trigger.dataset.answer;
     trigger.disabled = true;
+    return;
+  }
+
+  if (action === 'dismiss-wrong') {
+    if (!trigger.dataset.id) return;
+    dismissWrong(state, trigger.dataset.id);
+    persist();
+    renderRoute(true);
+    toast('已移出错题本，答题历史仍会保留');
   }
 }
 

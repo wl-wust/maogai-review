@@ -38,7 +38,8 @@ export function recordAnswer(state, questionId, correct, when = new Date()) {
     bestStreak: 0,
     lastCorrect: null,
     lastAt: null,
-    lastWrongAt: null
+    lastWrongAt: null,
+    dismissedFromWrong: false
   };
   const timestamp = when instanceof Date ? when.toISOString() : new Date(when).toISOString();
   const streak = correct ? previous.streak + 1 : 0;
@@ -51,7 +52,8 @@ export function recordAnswer(state, questionId, correct, when = new Date()) {
     bestStreak: Math.max(previous.bestStreak, streak),
     lastCorrect: Boolean(correct),
     lastAt: timestamp,
-    lastWrongAt: correct ? previous.lastWrongAt : timestamp
+    lastWrongAt: correct ? previous.lastWrongAt : timestamp,
+    dismissedFromWrong: false
   };
   return state.answered[questionId];
 }
@@ -89,9 +91,25 @@ export function getStats(state) {
 
 export function getWrongIds(state) {
   return Object.entries(state.answered)
-    .filter(([, record]) => record.lastCorrect === false)
+    .filter(([, record]) => record.lastCorrect === false && !record.dismissedFromWrong)
     .sort(([, left], [, right]) => new Date(right.lastWrongAt) - new Date(left.lastWrongAt))
     .map(([id]) => id);
+}
+
+export function dismissWrong(state, questionId) {
+  const record = state.answered[questionId];
+  if (!record) return false;
+  record.dismissedFromWrong = true;
+  return true;
+}
+
+export function getRecentAnswers(state, allQuestions, limit = 5) {
+  const questionMap = new Map(allQuestions.map((question) => [question.id, question]));
+  return Object.entries(state.answered)
+    .map(([id, record]) => ({ question: questionMap.get(id), record }))
+    .filter((item) => item.question?.stem && item.record.lastAt)
+    .sort((left, right) => new Date(right.record.lastAt) - new Date(left.record.lastAt))
+    .slice(0, limit);
 }
 
 export function getChapterProgress(state, questionIds) {
