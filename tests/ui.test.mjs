@@ -93,3 +93,22 @@ test('可以选择答案、提交并保留答题记录', async () => {
   assert.deepEqual(errors, []);
   await page.close();
 });
+
+test('主观题可切换无答案、挖空和完整答案', async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(`${baseUrl}#/recite`, { waitUntil: 'networkidle' });
+  await page.getByRole('heading', { name: '主观题背诵' }).waitFor();
+  await page.getByText('答案已隐藏').waitFor();
+  await page.getByRole('button', { name: '挖空背' }).click();
+  const blank = page.locator('.cloze-blank').first();
+  await blank.waitFor();
+  await blank.click();
+  assert.ok((await blank.innerText()).length > 1);
+  await page.getByRole('button', { name: '完整答案' }).click();
+  await page.locator('.answer-point').first().waitFor();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth
+  );
+  assert.ok(overflow <= 1, `背诵页面横向溢出 ${overflow}px`);
+  await page.close();
+});

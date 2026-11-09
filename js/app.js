@@ -1,4 +1,5 @@
 import { chapters, questions } from '../data/questions.js';
+import { subjective } from '../data/subjective.js';
 import {
   clearState,
   getWrongIds,
@@ -23,6 +24,8 @@ import {
   toggleSelection
 } from './quiz.js';
 import { renderQuiz } from './views/quiz.js';
+import { renderRecite } from './views/recite.js';
+import { setReciteMode } from './recite.js';
 
 const navItems = [
   { route: 'home', label: '首页', icon: 'layout-dashboard' },
@@ -83,6 +86,11 @@ function currentRoute() {
 function renderRoute(preserveScroll = false) {
   let { name, params } = currentRoute();
   normalizeSession();
+  if (name === 'recite' && params.get('item')) prepareReciteItem(params.get('item'));
+  if (name === 'recite') {
+    state.lastReciteItem =
+      params.get('item') ?? subjective[Math.max(0, state.subjective.index ?? 0)]?.id;
+  }
   if (name === 'quiz' && params.get('question')) {
     prepareQuestionSession(params.get('question'));
     history.replaceState(null, '', '#/quiz?resume=1');
@@ -104,6 +112,7 @@ function renderRoute(preserveScroll = false) {
     };
     main.innerHTML = renderKnowledge(state, params, knowledgeQuery);
   } else if (name === 'quiz') main.innerHTML = renderQuiz(state, params);
+  else if (name === 'recite') main.innerHTML = renderRecite(state, params);
   else main.innerHTML = renderPlaceholder(name, params);
 
   lastRoute = name;
@@ -272,6 +281,22 @@ function handleAction(event) {
     session.updatedAt = new Date().toISOString();
     persist();
     renderRoute(true);
+    return;
+  }
+
+  if (action === 'set-recite-mode') {
+    const itemId = state.lastReciteItem;
+    if (!itemId) return;
+    setReciteMode(state, itemId, trigger.dataset.mode);
+    persist();
+    renderRoute(true);
+    return;
+  }
+
+  if (action === 'reveal-cloze') {
+    trigger.classList.add('is-revealed');
+    trigger.textContent = trigger.dataset.answer;
+    trigger.disabled = true;
   }
 }
 
@@ -346,6 +371,14 @@ function prepareQuestionSession(questionId) {
   session.finished = false;
   session.updatedAt = new Date().toISOString();
   setLastSession(state, session);
+  persist();
+}
+
+function prepareReciteItem(itemId) {
+  const index = subjective.findIndex((item) => item.id === itemId);
+  if (index < 0) return;
+  state.lastReciteItem = itemId;
+  state.subjective.index = index;
   persist();
 }
 
