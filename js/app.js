@@ -4,10 +4,15 @@ import {
   getStats,
   loadState,
   resolveLastSession,
-  saveState
+  saveState,
+  toggleFavorite
 } from './core.js';
 import { escapeHTML, refreshIcons, toast } from './ui.js';
 import { renderHome } from './views/home.js';
+import {
+  renderKnowledge,
+  renderKnowledgeResults
+} from './views/knowledge.js';
 
 const navItems = [
   { route: 'home', label: '首页', icon: 'layout-dashboard' },
@@ -19,6 +24,9 @@ const navItems = [
 
 let state = loadState();
 const main = document.querySelector('#main-content');
+let knowledgeQuery = '';
+let knowledgeOptions = { chapterId: 'all', kind: 'all' };
+let lastRoute = null;
 
 renderNavigation();
 renderRoute();
@@ -26,6 +34,7 @@ refreshIcons();
 
 window.addEventListener('hashchange', renderRoute);
 document.addEventListener('click', handleAction);
+document.addEventListener('input', handleInput);
 
 function renderNavigation() {
   const desktop = navItems
@@ -71,8 +80,16 @@ function renderRoute() {
   });
 
   if (name === 'home') main.innerHTML = renderHome(state);
-  else main.innerHTML = renderPlaceholder(name, params);
+  else if (name === 'knowledge') {
+    if (lastRoute !== 'knowledge') knowledgeQuery = '';
+    knowledgeOptions = {
+      chapterId: params.get('chapter') ?? 'all',
+      kind: params.get('kind') ?? 'all'
+    };
+    main.innerHTML = renderKnowledge(state, params, knowledgeQuery);
+  } else main.innerHTML = renderPlaceholder(name, params);
 
+  lastRoute = name;
   refreshIcons(main);
   main.focus({ preventScroll: true });
   window.scrollTo({ top: 0, behavior: 'instant' });
@@ -137,6 +154,36 @@ function handleAction(event) {
     renderRoute();
     toast('学习记录已清空');
   }
+
+  if (action === 'favorite') {
+    const { category, id } = trigger.dataset;
+    if (!category || !id) return;
+    const active = toggleFavorite(state, category, id);
+    persist();
+    renderRoute();
+    toast(active ? '已加入收藏' : '已取消收藏');
+  }
+
+  if (action === 'clear-search') {
+    knowledgeQuery = '';
+    const input = document.querySelector('[data-search-input]');
+    if (input) input.value = '';
+    updateKnowledgeResults();
+    input?.focus();
+  }
+}
+
+function handleInput(event) {
+  if (!event.target.matches('[data-search-input]')) return;
+  knowledgeQuery = event.target.value;
+  updateKnowledgeResults();
+}
+
+function updateKnowledgeResults() {
+  const container = document.querySelector('#knowledge-results');
+  if (!container) return;
+  container.innerHTML = renderKnowledgeResults(knowledgeQuery, knowledgeOptions, state);
+  refreshIcons(container);
 }
 
 window.addEventListener('online', () => toast('已恢复网络，当前仍可继续离线使用'));
