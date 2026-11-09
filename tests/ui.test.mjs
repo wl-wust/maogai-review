@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { questions } from '../data/questions.js';
 
 const root = path.resolve(import.meta.dirname, '..');
 const mime = {
@@ -69,5 +70,26 @@ test('首页、主导航和移动端宽度正常', async () => {
     () => document.documentElement.scrollWidth - window.innerWidth
   );
   assert.ok(overflow <= 1, `页面横向溢出 ${overflow}px`);
+  await page.close();
+});
+
+test('可以选择答案、提交并保留答题记录', async () => {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto(`${baseUrl}#/quiz`, { waitUntil: 'networkidle' });
+  await page.getByRole('heading', { name: '章节练习' }).waitFor();
+  await page.locator('[data-action="start-quiz"]').click();
+  await page.locator('.option-button').first().waitFor();
+  const question = questions[0];
+  await page.locator(`[data-action="select-option"][data-key="${question.answer}"]`).click();
+  await page.locator('[data-action="submit-answer"]').click();
+  await page.locator('.answer-result-title strong').getByText('回答正确').waitFor();
+  await page.getByText('答案解析').waitFor();
+  const saved = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('maogai-review-state-v1'))
+  );
+  assert.equal(saved.answered[question.id].correctCount, 1);
+  assert.deepEqual(errors, []);
   await page.close();
 });

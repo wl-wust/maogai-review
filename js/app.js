@@ -1,10 +1,12 @@
 import { chapters, questions } from '../data/questions.js';
 import {
   clearState,
-  getStats,
+  getWrongIds,
   loadState,
+  recordAnswer,
   resolveLastSession,
   saveState,
+  setLastSession,
   toggleFavorite
 } from './core.js';
 import { escapeHTML, refreshIcons, toast } from './ui.js';
@@ -13,6 +15,14 @@ import {
   renderKnowledge,
   renderKnowledgeResults
 } from './views/knowledge.js';
+import {
+  buildQuiz,
+  createQuizSession,
+  getSessionSummary,
+  gradeQuizAnswer,
+  toggleSelection
+} from './quiz.js';
+import { renderQuiz } from './views/quiz.js';
 
 const navItems = [
   { route: 'home', label: '首页', icon: 'layout-dashboard' },
@@ -32,7 +42,7 @@ renderNavigation();
 renderRoute();
 refreshIcons();
 
-window.addEventListener('hashchange', renderRoute);
+window.addEventListener('hashchange', () => renderRoute());
 document.addEventListener('click', handleAction);
 document.addEventListener('input', handleInput);
 
@@ -70,8 +80,14 @@ function currentRoute() {
   };
 }
 
-function renderRoute() {
-  const { name, params } = currentRoute();
+function renderRoute(preserveScroll = false) {
+  let { name, params } = currentRoute();
+  normalizeSession();
+  if (name === 'quiz' && params.get('question')) {
+    prepareQuestionSession(params.get('question'));
+    history.replaceState(null, '', '#/quiz?resume=1');
+    params = new URLSearchParams('resume=1');
+  }
   document.querySelectorAll('[data-nav]').forEach((link) => {
     const active = link.dataset.nav === name;
     link.classList.toggle('is-active', active);
@@ -87,12 +103,13 @@ function renderRoute() {
       kind: params.get('kind') ?? 'all'
     };
     main.innerHTML = renderKnowledge(state, params, knowledgeQuery);
-  } else main.innerHTML = renderPlaceholder(name, params);
+  } else if (name === 'quiz') main.innerHTML = renderQuiz(state, params);
+  else main.innerHTML = renderPlaceholder(name, params);
 
   lastRoute = name;
   refreshIcons(main);
   main.focus({ preventScroll: true });
-  window.scrollTo({ top: 0, behavior: 'instant' });
+  if (!preserveScroll) window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
 function renderPlaceholder(name, params) {
@@ -133,15 +150,7 @@ function handleAction(event) {
 
   if (action === 'start-all') {
     const session = resolveLastSession(state, questions.map((q) => q.id));
-    if (!session) {
-      state.lastSession = {
-        mode: 'all',
-        questionIds: questions.map((q) => q.id),
-        index: 0,
-        updatedAt: new Date().toISOString()
-      };
-      persist();
-    }
+    if (!session || session.finished) startPracticeSession({ chapterId: 'all', type: 'all' });
     window.location.hash = '#/quiz?resume=1';
     return;
   }
@@ -151,7 +160,7 @@ function handleAction(event) {
     if (!confirmed) return;
     clearState();
     state = loadState();
-    renderRoute();
+    renderRoute(true);
     toast('学习记录已清空');
   }
 
@@ -160,7 +169,7 @@ function handleAction(event) {
     if (!category || !id) return;
     const active = toggleFavorite(state, category, id);
     persist();
-    renderRoute();
+    renderRoute(true);
     toast(active ? '已加入收藏' : '已取消收藏');
   }
 
@@ -170,6 +179,99 @@ function handleAction(event) {
     if (input) input.value = '';
     updateKnowledgeResults();
     input?.focus();
+  }
+
+  if (action === 'start-quiz') {
+    const chapterId = document.querySelector('#quiz-chapter')?.value ?? 'all';
+    const type = document.querySelector('#quiz-type')?.value ?? 'all';
+    const shuffle = document.querySelector('#quiz-order')?.value === 'random';
+    startPracticeSession({ chapterId, type, shuffle });
+    return;
+  }
+
+  if (action === 'start-all-quiz') {
+    startPracticeSession({ chapterId: 'all', type: 'all' });
+    return;
+  }
+
+  if (action === 'retry-wrong') {
+    const summary = state.lastSession ? getSessionSummary(state.lastSession) : null;
+    const wrongIds = summary?.wrongIds?.length ? summary.wrongIds : getWrongIds(state);
+    if (!wrongIds.length) {
+      toast('当前没有可重练的错题');
+      return;
+    }
+    startPracticeSession({
+      chapterId: 'all',
+      type: 'all',
+      source: 'wrong',
+      questionIds: wrongIds
+    });
+    return;
+  }
+
+  if (action === 'restart-quiz') {
+    const previous = state.lastSession;
+    startPracticeSession({
+      chapterId: previous?.chapterId ?? 'all',
+      type: previous?.type ?? 'all',
+      shuffle: previous?.shuffle
+    });
+    return;
+  }
+
+  if (action === 'select-option') {
+    const session = state.lastSession;
+    if (!session || session.finished) return;
+    const question = questions.find((item) => item.id === trigger.dataset.question);
+    if (!question) return;
+    session.answers ??= {};
+    const record = session.answers[question.id] ?? { selected: [], submitted: false };
+    if (record.submitted) return;
+    record.selected = toggleSelection(question, record.selected, trigger.dataset.key);
+    session.answers[question.id] = record;
+    session.updatedAt = new Date().toISOString();
+    persist();
+    renderRoute(true);
+    return;
+  }
+
+  if (action === 'submit-answer') {
+    const session = state.lastSession;
+    if (!session || session.finished) return;
+    const question = questions.find((item) => item.id === session.questionIds[session.index]);
+    const record = question ? session.answers?.[question.id] : null;
+    if (!question || !record || record.submitted) return;
+    const correct = gradeQuizAnswer(question, record.selected);
+    record.submitted = true;
+    record.correct = correct;
+    session.answers[question.id] = record;
+    session.updatedAt = new Date().toISOString();
+    recordAnswer(state, question.id, correct);
+    persist();
+    renderRoute(true);
+    toast(correct ? '回答正确' : '已记录错题', correct ? 'success' : 'warning');
+    return;
+  }
+
+  if (action === 'next-question') {
+    const session = state.lastSession;
+    if (!session) return;
+    if (session.index >= session.questionIds.length - 1) session.finished = true;
+    else session.index += 1;
+    session.updatedAt = new Date().toISOString();
+    persist();
+    renderRoute(true);
+    return;
+  }
+
+  if (action === 'previous-question') {
+    const session = state.lastSession;
+    if (!session || session.index <= 0) return;
+    session.index -= 1;
+    session.updatedAt = new Date().toISOString();
+    persist();
+    renderRoute(true);
   }
 }
 
@@ -186,8 +288,66 @@ function updateKnowledgeResults() {
   refreshIcons(container);
 }
 
+function normalizeSession() {
+  const session = state.lastSession;
+  if (!session || !Array.isArray(session.questionIds) || !session.questionIds.length) return;
+  session.answers ??= {};
+  session.index = Math.min(Math.max(0, Number(session.index) || 0), session.questionIds.length - 1);
+  session.chapterId ??= 'all';
+  session.type ??= 'all';
+  session.source ??= 'practice';
+  session.updatedAt ??= session.startedAt ?? new Date().toISOString();
+  session.finished = Boolean(session.finished);
+}
+
+function startPracticeSession({
+  chapterId = 'all',
+  type = 'all',
+  shuffle = false,
+  source = 'practice',
+  questionIds
+}) {
+  const pool = questionIds?.length
+    ? questionIds
+        .map((id) => questions.find((question) => question.id === id))
+        .filter(Boolean)
+    : buildQuiz(questions, { chapterId, type, shuffle });
+  if (!pool.length) {
+    toast('该范围暂无题目');
+    return;
+  }
+  state.lastSession = createQuizSession(pool, {
+    chapterId,
+    type,
+    shuffle,
+    source
+  });
+  persist();
+  const target = '#/quiz?resume=1';
+  if (window.location.hash === target) renderRoute();
+  else window.location.hash = target;
+}
+
+function prepareQuestionSession(questionId) {
+  const question = questions.find((item) => item.id === questionId);
+  if (!question) return;
+  let session = state.lastSession;
+  if (!session || !session.questionIds?.includes(questionId)) {
+    const pool = buildQuiz(questions, { chapterId: question.chapterId });
+    session = createQuizSession(pool, {
+      chapterId: question.chapterId,
+      type: 'all',
+      source: 'question',
+      index: pool.findIndex((item) => item.id === questionId)
+    });
+    state.lastSession = session;
+  }
+  session.index = session.questionIds.indexOf(questionId);
+  session.finished = false;
+  session.updatedAt = new Date().toISOString();
+  setLastSession(state, session);
+  persist();
+}
+
 window.addEventListener('online', () => toast('已恢复网络，当前仍可继续离线使用'));
 window.addEventListener('offline', () => toast('已进入离线模式，学习记录会继续保存在本机'));
-
-// 避免未使用变量在后续模块拆分时被误删。
-void getStats;
