@@ -1,4 +1,4 @@
-const CACHE_NAME = 'maogai-review-v1';
+const CACHE_NAME = 'maogai-review-v2';
 const APP_ASSETS = [
   './',
   './index.html',
